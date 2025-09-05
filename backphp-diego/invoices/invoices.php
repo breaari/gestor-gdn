@@ -3,21 +3,8 @@
 declare(strict_types=1);
 
 /* ========= CORS (with credentials) ========= */
-$allowed_origins = [
-  'http://localhost:5173',
-];
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
-if (in_array($origin, $allowed_origins, true)) {
-  header("Access-Control-Allow-Origin: $origin");
-  header('Access-Control-Allow-Credentials: true');
-} else {
-  header('Access-Control-Allow-Origin: http://localhost:5173');
-  header('Access-Control-Allow-Credentials: true');
-}
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
-header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+
 header('Content-Type: application/json; charset=utf-8');
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') { http_response_code(204); exit; }
 
 /* ============== BOOTSTRAP ============== */
 require __DIR__ . '/../bd/bd.php';

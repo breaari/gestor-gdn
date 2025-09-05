@@ -46,6 +46,26 @@ function public_user(array $row): array {
   ];
 }
 
+function exists_email(string $email, ?int $excludeId=null): bool {
+  $sql = 'SELECT 1 FROM users WHERE email = :e';
+  $p = [':e'=>$email];
+  if ($excludeId !== null) { $sql .= ' AND id <> :id'; $p[':id']=$excludeId; }
+  return (bool) db_select($sql.' LIMIT 1', $p)->fetchColumn();
+}
+function exists_cuit(string $cuit, ?int $excludeId=null): bool {
+  $sql = 'SELECT 1 FROM users WHERE cuit_or_cuil = :c';
+  $p = [':c'=>$cuit];
+  if ($excludeId !== null) { $sql .= ' AND id <> :id'; $p[':id']=$excludeId; }
+  return (bool) db_select($sql.' LIMIT 1', $p)->fetchColumn();
+}
+function exists_cbu(string $cbu, ?int $excludeId=null): bool {
+  $sql = 'SELECT 1 FROM users WHERE cbu_or_cvu = :cb';
+  $p = [':cb'=>$cbu];
+  if ($excludeId !== null) { $sql .= ' AND id <> :id'; $p[':id']=$excludeId; }
+  return (bool) db_select($sql.' LIMIT 1', $p)->fetchColumn();
+}
+
+
 /* ============== INPUT ============== */
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 $body = null;
@@ -192,6 +212,14 @@ try {
       if (!preg_match('/^\d{11}$/', $cuit))          out(['message'=>'CUIT/CUIL debe tener 11 dígitos'], 422);
       if ($company === '')                           out(['message'=>'company_name no puede ser vacío'], 422);
       if ($fantasy === '')                           out(['message'=>'fantasy_name no puede ser vacío'], 422);
+      // dentro del case 'PUT' después de armar $email/$cuit/$cbu etc:
+if ($email !== $curr['email'] && exists_email($email, $id)) out(['message'=>'Email ya registrado'], 409);
+if ($cuit  !== $curr['cuit_or_cuil'] && exists_cuit($cuit, $id)) out(['message'=>'CUIT/CUIL ya registrado'], 409);
+if ($cbu !== null && $cbu !== '' && $cbu !== ($curr['cbu_or_cvu'] ?? null) && exists_cbu($cbu, $id))
+  out(['message'=>'CBU/CVU ya está en uso'], 409);
+if (!$body && !empty($_POST)) $body = $_POST;
+if (!$body) $body = []; // ← evita array_key_exists sobre null
+
 
       if (exists_email($email, $id)) out(['message'=>'Email ya registrado'], 409);
       if (exists_cuit($cuit, $id))   out(['message'=>'CUIT/CUIL ya registrado'], 409);
