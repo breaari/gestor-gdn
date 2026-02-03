@@ -32,8 +32,8 @@ if (!is_dir($UPLOADS_FS_DIR)) {
 }
 
 /* Reglas */
-$MAX_BYTES = 10 * 1024 * 1024; // 10MB
-$ALLOWED_MIME = ['application/pdf','image/jpeg','image/png','image/webp'];
+$MAX_BYTES = 64 * 1024 * 1024; // 10MB
+$ALLOWED_MIME = ['application/pdf','image/jpeg', 'image/jpg','image/png','image/webp'];
 
 $file = $_FILES['file'];
 if ($file['error'] !== UPLOAD_ERR_OK) {
