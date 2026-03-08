@@ -2,6 +2,8 @@
 // backphp-diego/invoices/upload.php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../../config/cors.php';
+
 /* CORS */
 
 header('Content-Type: application/json; charset=utf-8');

@@ -8,6 +8,8 @@
 // - created_at, updated_at (TIMESTAMPs)
 declare(strict_types=1);
 
+require_once __DIR__ . '/../../config/cors.php';
+
 /* ========= CORS (with credentials) ========= */
 $allowed_origins = ['http://localhost:5173'];
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
