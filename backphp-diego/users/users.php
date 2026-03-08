@@ -2,15 +2,13 @@
 // backphp-diego/users/users.php
 declare(strict_types=1);
 
-require_once __DIR__ . '/../../config/cors.php';
+require_once __DIR__ . '/../config/cors.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
 /* ============== BOOTSTRAP ============== */
 require __DIR__ . '/../bd/bd.php';
 require __DIR__ . '/../config.php';
-
-
 
 /* ============== HELPERS ============== */
 function out($data, int $status = 200) {
