@@ -1,6 +1,6 @@
 // src/components/panel/InvoicesTable.jsx
 import React, { Fragment, useEffect, useMemo, useState } from "react";
-import { FaEye, FaUpload, FaTrash } from "react-icons/fa";
+import { FaEye, FaTrash } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
 import { Dialog, Transition } from "@headlessui/react";
 import {
@@ -33,33 +33,36 @@ const LOCALITIES_URL =
   import.meta.env.VITE_API_LOCALITIES_URL ??
   "https://backgdn.universidadsiglo21online.com/diego/localities/localities.php";
 
-const cx = (...c) => c.filter(Boolean).join(" ");
+const inputBaseClass =
+  "w-full rounded-md border border-slate-300 bg-white px-3 py-[9.5px] text-sm text-slate-700 placeholder:text-slate-400 shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200";
 
 export default function InvoicesTable({ isAdmin = false }) {
   const dispatch = useDispatch();
   const { items, status, error, filters, total, pagination } = useSelector(
-    (s) => s.invoices
+    (s) => s.invoices,
   );
   const authUser = useSelector((s) => s.users.authUser);
 
-  // --- cat/loc dinámicos ---
-  const [cats, setCats] = useState([]); // [{id,name}]
-  const [locs, setLocs] = useState([]); // [{id,name}]
+  const [cats, setCats] = useState([]);
+  const [locs, setLocs] = useState([]);
+
   const catMap = useMemo(
     () => Object.fromEntries(cats.map((c) => [String(c.id), c.name])),
-    [cats]
+    [cats],
   );
   const locMap = useMemo(
     () => Object.fromEntries(locs.map((l) => [String(l.id), l.name])),
-    [locs]
+    [locs],
   );
 
-  // Cache de proveedores (id -> {company_name, fantasy_name, ...})
   const [supplierMap, setSupplierMap] = useState({});
 
-  // Filtros locales (inputs controlados)
+  const [proveedor, setProveedor] = useState(String(filters.supplier_q || ""));
+  const [proveedorInput, setProveedorInput] = useState(
+    String(filters.supplier_q || ""),
+  );
   const [razonSocial, setRazonSocial] = useState(
-    String(filters.company_name || "")
+    String(filters.company_name || ""),
   );
   const [categoria, setCategoria] = useState(String(filters.category_id || ""));
   const [localidad, setLocalidad] = useState(String(filters.locality_id || ""));
@@ -68,12 +71,9 @@ export default function InvoicesTable({ isAdmin = false }) {
   const [validez, setValidez] = useState(
     filters.is_valid === 0 || filters.is_valid === 1
       ? String(filters.is_valid)
-      : ""
+      : "",
   );
 
-  const [localErr, setLocalErr] = useState("");
-
-  // Modal proveedor
   const [provModal, setProvModal] = useState({
     open: false,
     loading: false,
@@ -81,16 +81,14 @@ export default function InvoicesTable({ isAdmin = false }) {
     data: null,
   });
 
-  // Modal "Cargar comprobante"
   const [rcptModal, setRcptModal] = useState({
     open: false,
     loading: false,
     error: "",
     invoice: null,
-    file: null, // simulado
+    file: null,
   });
 
-  // Modal eliminar
   const [delModal, setDelModal] = useState({
     open: false,
     loading: false,
@@ -98,23 +96,19 @@ export default function InvoicesTable({ isAdmin = false }) {
     invoice: null,
   });
 
-  // MOBILE: sheet de filtros
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
-  // Forzar 5 por página una sola vez
   useEffect(() => {
     if ((pagination?.limit ?? 0) !== 5) {
       dispatch(setPagination({ limit: 5, offset: 0 }));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [dispatch, pagination?.limit]);
 
   const limit = pagination?.limit ?? 5;
   const offset = pagination?.offset ?? 0;
   const page = Math.floor(offset / limit) + 1;
   const pageCount = Math.max(1, Math.ceil((total ?? 0) / limit));
 
-  // Carga cat/loc al montar (sin is_active)
   useEffect(() => {
     const load = async () => {
       try {
@@ -122,34 +116,35 @@ export default function InvoicesTable({ isAdmin = false }) {
           fetch(`${CATEGORIES_URL}?limit=200`, { credentials: "include" }),
           fetch(`${LOCALITIES_URL}?limit=200`, { credentials: "include" }),
         ]);
+
         const dc = await rc.json().catch(() => ({}));
         const dl = await rl.json().catch(() => ({}));
+
         setCats(Array.isArray(dc?.categories) ? dc.categories : []);
         setLocs(Array.isArray(dl?.localities) ? dl.localities : []);
-      } catch (_) {
-        // silencioso
+      } catch {
+        //
       }
     };
+
     load();
   }, []);
 
-  // Carga inicial de facturas
   useEffect(() => {
     if (status === "idle" && authUser?.id) {
       dispatch(fetchInvoices());
     }
   }, [dispatch, status, authUser?.id]);
 
-  // Prefetch proveedores (admin)
   useEffect(() => {
     if (!isAdmin || !items?.length) return;
 
     const ids = [...new Set(items.map((r) => r?.supplier_id).filter(Boolean))];
     const missing = ids.filter((id) => !supplierMap[id]);
-
     if (missing.length === 0) return;
 
     let abort = false;
+
     (async () => {
       try {
         const results = await Promise.all(
@@ -160,6 +155,7 @@ export default function InvoicesTable({ isAdmin = false }) {
               });
               const data = await res.json().catch(() => ({}));
               if (!res.ok || !data?.user) return [id, null];
+
               const u = data.user;
               return [
                 id,
@@ -175,107 +171,173 @@ export default function InvoicesTable({ isAdmin = false }) {
             } catch {
               return [id, null];
             }
-          })
+          }),
         );
 
         if (abort) return;
+
         setSupplierMap((prev) => {
           const next = { ...prev };
-          for (const [id, val] of results) if (val) next[id] = val;
+          for (const [id, val] of results) {
+            if (val) next[id] = val;
+          }
           return next;
         });
-      } catch {}
+      } catch {
+        //
+      }
     })();
 
     return () => {
       abort = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, isAdmin]);
+  }, [items, isAdmin, supplierMap]);
+  useEffect(() => {
+    if (!isAdmin) return;
 
-  // Helper: empujar filtros al slice + fetch
+    const t = setTimeout(() => {
+      dispatch(setFilters({ supplier_q: proveedorInput || "" }));
+      dispatch(setPagination({ limit, offset: 0 }));
+      dispatch(fetchInvoices());
+    }, 350);
+
+    return () => clearTimeout(t);
+  }, [proveedorInput, isAdmin, dispatch, limit]);
+
   const pushFilters = (next) => {
-    dispatch(setFilters(next));
-    dispatch(fetchInvoices());
+  dispatch(setFilters(next));
+  dispatch(setPagination({ limit, offset: 0 }));
+  dispatch(fetchInvoices());
+};
+
+  const onChangeProveedor = (v) => {
+    setProveedorInput(v);
   };
 
-  // Handlers filtros
   const onChangeCat = (v) => {
     setCategoria(v);
     pushFilters({ category_id: v || "" });
   };
+
   const onChangeLoc = (v) => {
     setLocalidad(v);
     pushFilters({ locality_id: v || "" });
   };
+
   const onChangeEstado = (v) => {
     setEstado(v);
     pushFilters({ payment_status: v || "" });
   };
+
   const onChangeMes = (v) => {
     const n = Number(v);
     setMes(n);
     pushFilters({ month: n === 0 ? "" : n });
   };
+
   const onChangeValidez = (v) => {
     setValidez(v);
     pushFilters({ is_valid: v === "" ? "" : Number(v) });
   };
-  const onChangeRazon = (v) => {
-    setRazonSocial(v);
-    dispatch(setFilters({ company_name: v || "" }));
-    dispatch(fetchInvoices());
-  };
 
-  // Pills de filtros activos (definir DESPUÉS de los handlers)
+  const onChangeRazon = (v) => {
+  setRazonSocial(v);
+  dispatch(setFilters({ company_name: v || "" }));
+  dispatch(setPagination({ limit, offset: 0 }));
+  dispatch(fetchInvoices());
+};
+
   const activeFilters = useMemo(() => {
     const pills = [];
-    if (razonSocial)
+
+    if (proveedorInput) {
+      pills.push({
+        k: "Proveedor",
+        v: proveedorInput,
+        clear: () => onChangeProveedor(""),
+      });
+    }
+
+    if (razonSocial) {
       pills.push({
         k: "Razón",
         v: razonSocial,
         clear: () => onChangeRazon(""),
       });
-    if (categoria)
+    }
+
+    if (categoria) {
       pills.push({
         k: "Categoría",
         v: catMap[String(categoria)] ?? `#${categoria}`,
         clear: () => onChangeCat(""),
       });
-    if (localidad)
+    }
+
+    if (localidad) {
       pills.push({
         k: "Localidad",
         v: locMap[String(localidad)] ?? `#${localidad}`,
         clear: () => onChangeLoc(""),
       });
-    if (estado)
-      pills.push({ k: "Estado", v: estado, clear: () => onChangeEstado("") });
+    }
+
+    if (estado) {
+      pills.push({
+        k: "Estado",
+        v: estado,
+        clear: () => onChangeEstado(""),
+      });
+    }
+
     if (mes && Number(mes) !== 0) {
       const mLabel =
         MONTHS_ES.find((m) => Number(m.v) === Number(mes))?.label ?? mes;
-      pills.push({ k: "Mes", v: mLabel, clear: () => onChangeMes(0) });
+      pills.push({
+        k: "Mes",
+        v: mLabel,
+        clear: () => onChangeMes(0),
+      });
     }
-    if (validez !== "")
+
+    if (validez !== "") {
       pills.push({
         k: "Validez",
         v: validez === "1" ? "Válidas" : "No válidas",
         clear: () => onChangeValidez(""),
       });
-    return pills;
-  }, [razonSocial, categoria, localidad, estado, mes, validez, catMap, locMap]);
+    }
 
-  // Abrir modal proveedor
+    return pills;
+  }, [
+    proveedor,
+    razonSocial,
+    categoria,
+    localidad,
+    estado,
+    mes,
+    validez,
+    catMap,
+    locMap,
+  ]);
+
   const openProveedor = async (supplierId) => {
     if (!supplierId) return;
+
     setProvModal({ open: true, loading: true, error: "", data: null });
+
     try {
       const res = await fetch(`${USERS_URL}?id=${supplierId}`, {
         credentials: "include",
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok)
+
+      if (!res.ok) {
         throw new Error(data?.message || "No se pudo cargar el proveedor.");
+      }
+
       const user = data?.user ?? null;
+
       setProvModal({
         open: true,
         loading: false,
@@ -291,17 +353,16 @@ export default function InvoicesTable({ isAdmin = false }) {
       });
     }
   };
+
   const closeProveedor = () =>
     setProvModal({ open: false, loading: false, error: "", data: null });
 
-  // Paginación
   const handlePageChange = (nextPage) => {
     if (nextPage < 1 || nextPage > pageCount) return;
     dispatch(setPage(nextPage));
     dispatch(fetchInvoices());
   };
 
-  // Comprobante (simulado)
   const openReceipt = (invoice) =>
     setRcptModal({
       open: true,
@@ -310,6 +371,7 @@ export default function InvoicesTable({ isAdmin = false }) {
       invoice,
       file: null,
     });
+
   const closeReceipt = () =>
     setRcptModal({
       open: false,
@@ -321,15 +383,17 @@ export default function InvoicesTable({ isAdmin = false }) {
 
   const confirmReceipt = async () => {
     if (!rcptModal.invoice?.id) return;
+
     try {
       setRcptModal((m) => ({ ...m, loading: true, error: "" }));
-      // Simulamos subida de comprobante y marcamos Pagado
+
       await dispatch(
         updateInvoice({
           id: rcptModal.invoice.id,
           updates: { payment_status: "Pagado" },
-        })
+        }),
       ).unwrap();
+
       closeReceipt();
     } catch (e) {
       setRcptModal((m) => ({
@@ -340,21 +404,23 @@ export default function InvoicesTable({ isAdmin = false }) {
     }
   };
 
-  // Eliminar (UI)
   const openDelete = (invoice) =>
     setDelModal({ open: true, loading: false, error: "", invoice });
+
   const closeDelete = () =>
     setDelModal({ open: false, loading: false, error: "", invoice: null });
+
   const confirmDelete = async () => {
     if (!delModal.invoice?.id) return;
+
     try {
       setDelModal((m) => ({ ...m, loading: true, error: "" }));
+
       await dispatch(
-        deleteInvoice({ id: delModal.invoice.id, hard: true })
+        deleteInvoice({ id: delModal.invoice.id, hard: true }),
       ).unwrap();
-      closeDelete(); // el reducer ya saca la fila
-      // opcional: si querés forzar refetch ↓
-      // dispatch(fetchInvoices());
+
+      closeDelete();
     } catch (e) {
       setDelModal((m) => ({
         ...m,
@@ -366,11 +432,10 @@ export default function InvoicesTable({ isAdmin = false }) {
   };
 
   const resetAllFilters = () => {
-    // 1) Reset Redux
     dispatch(clearFilters());
     dispatch(setPage(1));
 
-    // 2) Reset estados locales controlados
+    setProveedorInput("");
     setRazonSocial("");
     setCategoria("");
     setLocalidad("");
@@ -378,27 +443,28 @@ export default function InvoicesTable({ isAdmin = false }) {
     setMes(0);
     setValidez("");
 
-    // 3) Refetch
     dispatch(fetchInvoices());
   };
 
   return (
     <div className="p-4 md:p-5">
-      {/* ===== MOBILE: trigger filtros + chips ===== */}
-      <div className="md:hidden sticky top-0 z-30 -mx-4 px-4 py-2 flex items-center gap-2">
+      <div className="md:hidden sticky top-0 z-30 -mx-4 px-4 py-2 space-y-2 bg-slate-50/95 backdrop-blur supports-[backdrop-filter]:bg-slate-50/75">
+        {isAdmin && (
+          <input
+            type="text"
+            className={inputBaseClass}
+            placeholder="Buscar por proveedor"
+            value={proveedorInput}
+            onChange={(e) => onChangeProveedor(e.target.value)}
+          />
+        )}
+
         <button
           type="button"
           onClick={() => setMobileFiltersOpen(true)}
-          className="flex-1 inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800"
+          className="w-full inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50"
         >
           Filtros{activeFilters.length ? ` (${activeFilters.length})` : ""}
-        </button>
-        <button
-          type="button"
-          onClick={resetAllFilters}
-          className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
-        >
-          Limpiar
         </button>
       </div>
 
@@ -432,97 +498,117 @@ export default function InvoicesTable({ isAdmin = false }) {
         </div>
       )}
 
-      {/* ===== DESKTOP filters ===== */}
       <section className="mb-5 hidden md:block">
         <div className="rounded-md bg-white p-4 md:p-5">
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
-            <div>
-              <label className="field-label mb-2">Razón social</label>
-              <select
-                className="select border border-slate-300 w-full"
-                value={razonSocial}
-                onChange={(e) => onChangeRazon(e.target.value)}
-              >
-                <option value="">Todas</option>
-                {COMPANY_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
+          <div className="space-y-4">
+            <div
+              className={`grid grid-cols-1 ${
+                isAdmin ? "md:grid-cols-2" : "md:grid-cols-1"
+              } gap-4 items-end`}
+            >
+              {isAdmin && (
+                <div>
+                  <label className="field-label mb-2">Proveedor</label>
+                  <input
+                    type="text"
+                    className={inputBaseClass}
+                    placeholder="Buscar por proveedor"
+                    value={proveedorInput}
+                    onChange={(e) => onChangeProveedor(e.target.value)}
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="field-label mb-2">Razón social</label>
+                <select
+                  className="select border border-slate-300 w-full"
+                  value={razonSocial}
+                  onChange={(e) => onChangeRazon(e.target.value)}
+                >
+                  <option value="">Todas</option>
+                  {COMPANY_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            <div>
-              <label className="field-label mb-2">Categoría</label>
-              <select
-                className="select border border-slate-300 w-full"
-                value={categoria}
-                onChange={(e) => onChangeCat(e.target.value)}
-              >
-                <option value="">Todas</option>
-                {cats.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+              <div>
+                <label className="field-label mb-2">Categoría</label>
+                <select
+                  className="select border border-slate-300 w-full"
+                  value={categoria}
+                  onChange={(e) => onChangeCat(e.target.value)}
+                >
+                  <option value="">Todas</option>
+                  {cats.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="field-label mb-2">Localidad</label>
-              <select
-                className="select border border-slate-300 w-full"
-                value={localidad}
-                onChange={(e) => onChangeLoc(e.target.value)}
-              >
-                <option value="">Todas</option>
-                {locs.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+              <div>
+                <label className="field-label mb-2">Localidad</label>
+                <select
+                  className="select border border-slate-300 w-full"
+                  value={localidad}
+                  onChange={(e) => onChangeLoc(e.target.value)}
+                >
+                  <option value="">Todas</option>
+                  {locs.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="field-label mb-2">Estado</label>
-              <select
-                className="select border border-slate-300 w-full"
-                value={estado}
-                onChange={(e) => onChangeEstado(e.target.value)}
-              >
-                <option value="">Todos</option>
-                <option value="Pagado">Pagado</option>
-                <option value="Pendiente">Pendiente</option>
-              </select>
-            </div>
+              <div>
+                <label className="field-label mb-2">Estado</label>
+                <select
+                  className="select border border-slate-300 w-full"
+                  value={estado}
+                  onChange={(e) => onChangeEstado(e.target.value)}
+                >
+                  <option value="">Todos</option>
+                  <option value="Pagado">Pagado</option>
+                  <option value="Pendiente">Pendiente</option>
+                </select>
+              </div>
 
-            <div>
-              <label className="field-label mb-2">Mes</label>
-              <select
-                className="select border border-slate-300 w-full"
-                value={mes}
-                onChange={(e) => onChangeMes(e.target.value)}
-              >
-                {MONTHS_ES.map((m) => (
-                  <option key={m.v} value={m.v}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+              <div>
+                <label className="field-label mb-2">Mes</label>
+                <select
+                  className="select border border-slate-300 w-full"
+                  value={mes}
+                  onChange={(e) => onChangeMes(e.target.value)}
+                >
+                  {MONTHS_ES.map((m) => (
+                    <option key={m.v} value={m.v}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="field-label mb-2">Validez</label>
-              <select
-                className="select border border-slate-300 w-full"
-                value={validez}
-                onChange={(e) => onChangeValidez(e.target.value)}
-              >
-                <option value="">Todas</option>
-                <option value="1">Sólo válidas</option>
-                <option value="0">Sólo no válidas</option>
-              </select>
+              <div>
+                <label className="field-label mb-2">Validez</label>
+                <select
+                  className="select border border-slate-300 w-full"
+                  value={validez}
+                  onChange={(e) => onChangeValidez(e.target.value)}
+                >
+                  <option value="">Todas</option>
+                  <option value="1">Sólo válidas</option>
+                  <option value="0">Sólo no válidas</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -538,7 +624,6 @@ export default function InvoicesTable({ isAdmin = false }) {
         </div>
       </section>
 
-      {/* ===== LISTA MOBILE (cards) ===== */}
       <div className="md:hidden mt-4 space-y-3">
         {status === "loading" && (
           <div className="rounded-lg border bg-white p-4 text-center text-slate-500">
@@ -562,7 +647,6 @@ export default function InvoicesTable({ isAdmin = false }) {
             const locName = r.locality_id
               ? locMap[String(r.locality_id)] || `#${r.locality_id}`
               : "—";
-
             const sup = supplierMap[r.supplier_id];
             const proveedorLabel = sup
               ? `${sup.company_name || "—"}${
@@ -571,7 +655,10 @@ export default function InvoicesTable({ isAdmin = false }) {
               : `Proveedor #${r.supplier_id}`;
 
             return (
-              <div key={r.id} className="rounded-xl border bg-white p-3 shadow-sm">
+              <div
+                key={r.id}
+                className="rounded-xl border bg-white p-3 shadow-sm"
+              >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm text-slate-500">
                     {fmtDateAR(r.upload_date)}
@@ -606,7 +693,6 @@ export default function InvoicesTable({ isAdmin = false }) {
                 </div>
 
                 <div className="mt-3 flex items-center gap-3">
-                  {/* Ver archivo */}
                   {hasFile ? (
                     <a
                       href={href}
@@ -620,19 +706,17 @@ export default function InvoicesTable({ isAdmin = false }) {
                     <span className="text-slate-400 text-sm">—</span>
                   )}
 
-                  {/* Admin actions */}
                   {isAdmin && <EditInvoice invoice={r} />}
                   {isAdmin && <AddInvoicePayment invoice={r} />}
-
                   {isAdmin && (
                     <button
                       type="button"
                       onClick={() => openDelete(r)}
-                      className="inline-flex items-center gap-2 rounded-md  px-3 py-2 text-sm font-medium hover:text-red-700 text-slate-300 "
+                      className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:text-red-700 text-slate-300"
                       title="Eliminar"
                       aria-label="Eliminar"
                     >
-                      <FaTrash /> 
+                      <FaTrash />
                     </button>
                   )}
                 </div>
@@ -641,7 +725,6 @@ export default function InvoicesTable({ isAdmin = false }) {
           })}
       </div>
 
-      {/* ===== TABLA DESKTOP ===== */}
       <div className="hidden md:block card mt-5">
         <div className="overflow-x-auto">
           <table className="table">
@@ -681,7 +764,6 @@ export default function InvoicesTable({ isAdmin = false }) {
                   const locName = r.locality_id
                     ? locMap[String(r.locality_id)] || `#${r.locality_id}`
                     : "—";
-
                   const sup = supplierMap[r.supplier_id];
                   const proveedorLabel = sup
                     ? `${sup.company_name || "—"}${
@@ -731,10 +813,8 @@ export default function InvoicesTable({ isAdmin = false }) {
                           reason={r.invalid_reason}
                         />
                       </Td>
-
                       <Td>
                         <div className="flex items-center gap-2">
-                          {/* Ver archivo */}
                           {hasFile ? (
                             <a
                               href={href}
@@ -750,16 +830,8 @@ export default function InvoicesTable({ isAdmin = false }) {
                             <span className="text-slate-400">—</span>
                           )}
 
-                          {/* Editar / Cargar comprobante / Eliminar => SOLO admin */}
                           {isAdmin && <EditInvoice invoice={r} />}
-
-                          {isAdmin && (
-                            <AddInvoicePayment
-                              invoice={r}
-                              // defaultMarkPaid={true}
-                            />
-                          )}
-
+                          {isAdmin && <AddInvoicePayment invoice={r} />}
                           {isAdmin && (
                             <button
                               type="button"
@@ -793,7 +865,6 @@ export default function InvoicesTable({ isAdmin = false }) {
         </div>
       </div>
 
-      {/* ===== Paginación ===== */}
       <Pagination
         page={page}
         pageCount={pageCount}
@@ -803,7 +874,6 @@ export default function InvoicesTable({ isAdmin = false }) {
         onPageChange={handlePageChange}
       />
 
-      {/* ===== Modal Proveedor ===== */}
       <Transition appear show={provModal.open} as={Fragment}>
         <Dialog as="div" className="relative z-50" onClose={closeProveedor}>
           <Transition.Child
@@ -837,9 +907,11 @@ export default function InvoicesTable({ isAdmin = false }) {
                   {provModal.loading && (
                     <p className="text-slate-500">Cargando proveedor…</p>
                   )}
+
                   {!provModal.loading && provModal.error && (
                     <p className="text-red-600">{provModal.error}</p>
                   )}
+
                   {!provModal.loading && !provModal.error && (
                     <ProfileCard user={provModal.data} compact />
                   )}
@@ -860,7 +932,6 @@ export default function InvoicesTable({ isAdmin = false }) {
         </Dialog>
       </Transition>
 
-      {/* ===== Modal Cargar Comprobante (simulado) ===== */}
       <Transition appear show={rcptModal.open} as={Fragment}>
         <Dialog
           as="div"
@@ -896,7 +967,8 @@ export default function InvoicesTable({ isAdmin = false }) {
                   </Dialog.Title>
 
                   <p className="mt-2 text-sm text-slate-600">
-                    Esta acción marcará la factura como <b>Pagado</b>. (Simulado)
+                    Esta acción marcará la factura como <b>Pagado</b>.
+                    (Simulado)
                   </p>
 
                   {rcptModal.error && (
@@ -932,13 +1004,16 @@ export default function InvoicesTable({ isAdmin = false }) {
                     >
                       Cancelar
                     </button>
+
                     <button
                       type="button"
                       onClick={confirmReceipt}
                       disabled={rcptModal.loading}
                       className="inline-flex items-center rounded-md bg-azuloscuro px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
                     >
-                      {rcptModal.loading ? "Guardando…" : "Guardar y marcar pagada"}
+                      {rcptModal.loading
+                        ? "Guardando…"
+                        : "Guardar y marcar pagada"}
                     </button>
                   </div>
                 </Dialog.Panel>
@@ -948,7 +1023,6 @@ export default function InvoicesTable({ isAdmin = false }) {
         </Dialog>
       </Transition>
 
-      {/* ===== Modal Eliminar (UI ready) ===== */}
       <Transition appear show={delModal.open} as={Fragment}>
         <Dialog
           as="div"
@@ -1003,6 +1077,7 @@ export default function InvoicesTable({ isAdmin = false }) {
                     >
                       Cancelar
                     </button>
+
                     <button
                       type="button"
                       onClick={confirmDelete}
@@ -1019,7 +1094,6 @@ export default function InvoicesTable({ isAdmin = false }) {
         </Dialog>
       </Transition>
 
-      {/* ===== MOBILE Filter Sheet (bottom) ===== */}
       <Transition appear show={mobileFiltersOpen} as={Fragment}>
         <Dialog
           as="div"
@@ -1049,7 +1123,6 @@ export default function InvoicesTable({ isAdmin = false }) {
               leaveTo="translate-y-full"
             >
               <Dialog.Panel className="mx-auto w-full max-w-md rounded-t-2xl bg-white shadow-2xl">
-                {/* handle */}
                 <div className="w-full flex justify-center py-2">
                   <div className="h-1.5 w-12 rounded-full bg-slate-200" />
                 </div>
@@ -1151,7 +1224,6 @@ export default function InvoicesTable({ isAdmin = false }) {
                   </div>
                 </div>
 
-                {/* Footer fijo */}
                 <div className="sticky bottom-0 flex items-center gap-3 px-4 py-3 border-t bg-white rounded-b-2xl">
                   <button
                     type="button"
@@ -1162,6 +1234,7 @@ export default function InvoicesTable({ isAdmin = false }) {
                   >
                     Limpiar
                   </button>
+
                   <button
                     type="button"
                     onClick={() => setMobileFiltersOpen(false)}
@@ -1179,8 +1252,31 @@ export default function InvoicesTable({ isAdmin = false }) {
   );
 }
 
+function Th({ children }) {
+  return <th className="th">{children}</th>;
+}
+
+function Td({ children, className = "" }) {
+  return <td className={`td ${className}`}>{children}</td>;
+}
+
+function StatusBadge({ estado }) {
+  const base = "status-badge transition-colors duration-300 ease-in-out";
+
+  if (estado === "Pagado") {
+    return <span className={`${base} status-badge--paid`}>Pagado</span>;
+  }
+
+  if (estado === "Pendiente") {
+    return <span className={`${base} status-badge--pend`}>Pendiente</span>;
+  }
+
+  return <span className={`${base} status-badge--muted`}>—</span>;
+}
+
 function ValidityBadge({ isValid, reason }) {
   const base = "status-badge transition-colors duration-300 ease-in-out";
+
   return isValid ? (
     <span className={`${base} status-badge--paid`} title="Factura válida">
       Válida
@@ -1193,28 +1289,4 @@ function ValidityBadge({ isValid, reason }) {
       No válida
     </span>
   );
-}
-
-/* UI helpers */
-function Field({ label, children }) {
-  return (
-    <div>
-      <label className="field-label">{label}</label>
-      {children}
-    </div>
-  );
-}
-function Th({ children }) {
-  return <th className="th">{children}</th>;
-}
-function Td({ children, className = "" }) {
-  return <td className={`td ${className}`}>{children}</td>;
-}
-function StatusBadge({ estado }) {
-  const base = "status-badge transition-colors duration-300 ease-in-out";
-  if (estado === "Pagado")
-    return <span className={`${base} status-badge--paid`}>Pagado</span>;
-  if (estado === "Pendiente")
-    return <span className={`${base} status-badge--pend`}>Pendiente</span>;
-  return <span className={`${base} status-badge--muted`}>—</span>;
 }

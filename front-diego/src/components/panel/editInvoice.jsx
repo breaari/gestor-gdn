@@ -6,7 +6,8 @@ import { updateInvoice } from "../../redux/invoices.slice";
 import { COMPANY_OPTIONS, toAbsoluteFileUrl } from "../utils";
 
 const USERS_URL =
-  import.meta.env.VITE_API_USERS_URL ?? "https://backgdn.universidadsiglo21online.com/diego/users/users.php";
+  import.meta.env.VITE_API_USERS_URL ??
+  "https://backgdn.universidadsiglo21online.com/diego/users/users.php";
 const SUPPLIERS_QUERY = "suppliers=1";
 
 const CATEGORIES_URL =
@@ -16,9 +17,13 @@ const LOCALITIES_URL =
   import.meta.env.VITE_API_LOCALITIES_URL ??
   "https://backgdn.universidadsiglo21online.com/diego/localities/localities.php";
 
+const UPLOADS_URL =
+  import.meta.env.VITE_API_UPLOADS_URL ??
+  "https://backgdn.universidadsiglo21online.com/diego/invoices/upload.php";
+
 export default function EditInvoice({
-  invoice,        // { id, supplier_id, company_name, category_id, locality_id, payment_status, is_valid, invalid_reason, invalidated_at, archive_path, ... }
-  children,       // opcional: texto del botón en lugar del ícono
+  invoice, // { id, supplier_id, company_name, category_id, locality_id, payment_status, is_valid, invalid_reason, invalidated_at, archive_path, ... }
+  children, // opcional: texto del botón en lugar del ícono
   className = "",
   onUpdated,
 }) {
@@ -46,10 +51,12 @@ export default function EditInvoice({
   const [localityId, setLocalityId] = useState(invoice?.locality_id ?? "");
   const [status, setStatus] = useState(invoice?.payment_status ?? "Pendiente");
   const [isValid, setIsValid] = useState(
-    typeof invoice?.is_valid === "number" ? invoice.is_valid === 1 : true
+    typeof invoice?.is_valid === "number" ? invoice.is_valid === 1 : true,
   );
-  const [invalidReason, setInvalidReason] = useState(invoice?.invalid_reason ?? "");
-  const [file, setFile] = useState(null); // reemplazo simulado
+  const [invalidReason, setInvalidReason] = useState(
+    invoice?.invalid_reason ?? "",
+  );
+  const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const nameRef = useRef(null);
@@ -74,7 +81,8 @@ export default function EditInvoice({
       String(localityId || "") !== String(original.locality_id || "") ||
       status !== original.payment_status ||
       (isValid ? 1 : 0) !== original.is_valid ||
-      (isValid ? null : (invalidReason || "")) !== (original.invalid_reason || null) ||
+      (isValid ? null : invalidReason || "") !==
+        (original.invalid_reason || null) ||
       !!file;
     return !!invoice?.id && !!companyTrim && !!status && changed;
   }, [
@@ -98,13 +106,16 @@ export default function EditInvoice({
     setCategoryId(invoice?.category_id ?? "");
     setLocalityId(invoice?.locality_id ?? "");
     setStatus(invoice?.payment_status ?? "Pendiente");
-    setIsValid(typeof invoice?.is_valid === "number" ? invoice.is_valid === 1 : true);
+    setIsValid(
+      typeof invoice?.is_valid === "number" ? invoice.is_valid === 1 : true,
+    );
     setInvalidReason(invoice?.invalid_reason ?? "");
     setFile(null);
     setErr("");
     setOpen(true);
     setTimeout(() => nameRef.current?.focus(), 0);
   };
+
   const closeModal = () => {
     setErr("");
     setOpen(false);
@@ -151,9 +162,12 @@ export default function EditInvoice({
       try {
         setSupErr("");
         setSupLoading(true);
-        const res = await fetch(`${USERS_URL}?${SUPPLIERS_QUERY}`, { credentials: "include" });
+        const res = await fetch(`${USERS_URL}?${SUPPLIERS_QUERY}`, {
+          credentials: "include",
+        });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data?.message || "No se pudo cargar proveedores.");
+        if (!res.ok)
+          throw new Error(data?.message || "No se pudo cargar proveedores.");
         let list = data?.suppliers || data?.users || [];
         list = Array.isArray(list) ? list : [];
         list = list
@@ -170,12 +184,33 @@ export default function EditInvoice({
         if (!abort) setSupLoading(false);
       }
     })();
-    return () => { abort = true; };
+    return () => {
+      abort = true;
+    };
   }, [open, isAdmin]);
 
-  // path simulado para reemplazo de archivo
-  const simulatePath = (f) =>
-    `/uploads/${Date.now()}_${(f?.name || "archivo").replace(/\s+/g, "_")}`;
+  const uploadFile = async (f) => {
+    const fd = new FormData();
+    fd.append("file", f);
+
+    const res = await fetch(UPLOADS_URL, {
+      method: "POST",
+      body: fd,
+      credentials: "include",
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      throw new Error(data?.message || "No se pudo subir el archivo.");
+    }
+
+    if (!data?.path) {
+      throw new Error("La subida no devolvió path.");
+    }
+
+    return data.path;
+  };
 
   const nowSQL = () => {
     const d = new Date();
@@ -201,7 +236,8 @@ export default function EditInvoice({
       if (isAdmin && supplierId !== original.supplier_id) {
         updates.supplier_id = Number(supplierId);
       }
-      if (companyTrim !== original.company_name) updates.company_name = companyTrim;
+      if (companyTrim !== original.company_name)
+        updates.company_name = companyTrim;
       if (String(categoryId || "") !== String(original.category_id || "")) {
         updates.category_id = categoryId ? Number(categoryId) : null;
       }
@@ -221,12 +257,18 @@ export default function EditInvoice({
           updates.invalid_reason = null;
           updates.invalidated_at = null;
         }
-      } else if (nextValidInt === 0 && (invalidReason || "") !== (original.invalid_reason || "")) {
+      } else if (
+        nextValidInt === 0 &&
+        (invalidReason || "") !== (original.invalid_reason || "")
+      ) {
         // sigue inválida pero cambió el motivo
         updates.invalid_reason = (invalidReason || "").trim() || null;
       }
 
-      if (file) updates.archive_path = simulatePath(file);
+      if (file) {
+        const uploadedPath = await uploadFile(file);
+        updates.archive_path = uploadedPath;
+      }
 
       await dispatch(updateInvoice({ id: invoice.id, updates })).unwrap();
       onUpdated?.();
@@ -235,7 +277,7 @@ export default function EditInvoice({
       setErr(
         (typeof e2 === "string" && e2) ||
           e2?.message ||
-          "No se pudo actualizar la factura."
+          "No se pudo actualizar la factura.",
       );
     } finally {
       setLoading(false);
@@ -252,7 +294,9 @@ export default function EditInvoice({
       <button
         type="button"
         onClick={openModal}
-        className={children ? `btn-outline ${className}` : `icon-btn ${className}`}
+        className={
+          children ? `btn-outline ${className}` : `icon-btn ${className}`
+        }
         title="Editar factura"
         aria-label="Editar factura"
       >
@@ -262,7 +306,10 @@ export default function EditInvoice({
       {/* Modal */}
       {open && (
         <div className="modal">
-          <div className="modal-overlay" onClick={() => !loading && closeModal()} />
+          <div
+            className="modal-overlay"
+            onClick={() => !loading && closeModal()}
+          />
           <div className="modal-center">
             <div className="modal-card">
               {/* Header */}
@@ -290,13 +337,19 @@ export default function EditInvoice({
                     <Field label="Proveedor">
                       <select
                         value={supplierId ?? ""}
-                        onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : null)}
+                        onChange={(e) =>
+                          setSupplierId(
+                            e.target.value ? Number(e.target.value) : null,
+                          )
+                        }
                         className="select border border-slate-300 text-black cursor-pointer"
                         disabled={supLoading}
                       >
                         <option value="">—</option>
                         {suppliers.map((s) => (
-                          <option key={s.id} value={s.id}>{s.label}</option>
+                          <option key={s.id} value={s.id}>
+                            {s.label}
+                          </option>
                         ))}
                       </select>
                     </Field>
@@ -325,7 +378,9 @@ export default function EditInvoice({
                       <select
                         value={categoryId ?? ""}
                         onChange={(e) =>
-                          setCategoryId(e.target.value ? Number(e.target.value) : "")
+                          setCategoryId(
+                            e.target.value ? Number(e.target.value) : "",
+                          )
                         }
                         className="select border border-slate-300 text-black cursor-pointer"
                         disabled={optsLoading}
@@ -343,7 +398,9 @@ export default function EditInvoice({
                       <select
                         value={localityId ?? ""}
                         onChange={(e) =>
-                          setLocalityId(e.target.value ? Number(e.target.value) : "")
+                          setLocalityId(
+                            e.target.value ? Number(e.target.value) : "",
+                          )
                         }
                         className="select border border-slate-300 text-black cursor-pointer"
                         disabled={optsLoading}
@@ -379,13 +436,17 @@ export default function EditInvoice({
                           checked={isValid}
                           onChange={(e) => setIsValid(e.target.checked)}
                         />
-                        <span className="text-sm text-slate-700">Factura válida</span>
+                        <span className="text-sm text-slate-700">
+                          Factura válida
+                        </span>
                       </label>
                     </div>
 
                     {!isValid && (
                       <div className="mt-3">
-                        <label className="field-label mb-1">Motivo de invalidez</label>
+                        <label className="field-label mb-1">
+                          Motivo de invalidez
+                        </label>
                         <input
                           type="text"
                           value={invalidReason}
@@ -398,19 +459,53 @@ export default function EditInvoice({
                     )}
                   </div>
 
-                  <Field label="Archivo actual">
-                    {currentFileHref ? (
-                      <a
-                        href={currentFileHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-azuloscuro underline"
-                      >
-                        Ver archivo
-                      </a>
-                    ) : (
-                      <span className="text-slate-500">—</span>
-                    )}
+                  <Field label="Archivo">
+                    <div className="space-y-3">
+                      {currentFileHref ? (
+                        <a
+                          href={currentFileHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-azuloscuro underline"
+                        >
+                          Ver archivo actual
+                        </a>
+                      ) : (
+                        <span className="text-slate-500">—</span>
+                      )}
+
+                      <div>
+                        <input
+                          type="file"
+                          accept=".pdf,image/jpeg,image/jpg,image/png,image/webp"
+                          onChange={(e) => setFile(e.target.files?.[0] || null)}
+                          className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium"
+                        />
+                        <p className="mt-1 text-xs text-slate-500">
+                          Formatos permitidos: PDF, JPG, PNG, WEBP. Máximo 10
+                          MB.
+                        </p>
+                        <p className="text-xs text-rojonaranja">
+                          Si seleccionás un nuevo archivo, reemplazará el
+                          actual.
+                        </p>
+                      </div>
+
+                      {file && (
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="text-sm text-slate-700">
+                            Nuevo archivo: <strong>{file.name}</strong>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setFile(null)}
+                            className="text-sm text-red-600 underline"
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </Field>
                 </div>
 
