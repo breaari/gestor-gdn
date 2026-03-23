@@ -2,11 +2,9 @@
 // backphp-diego/invoice_payments/invoice_payments.php
 declare(strict_types=1);
 
-require_once __DIR__ . '/../config/cors.php';
-
 /* ============== BOOTSTRAP ============== */
 require __DIR__ . '/../bd/bd.php';
-require __DIR__ . '/../config.php';
+require __DIR__ . '/../config/config.php';
 
 /* ============== CONFIG UPLOADS ============== */
 // Ruta en disco donde se guardan los archivos

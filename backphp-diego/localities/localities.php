@@ -8,11 +8,9 @@
 // - created_at, updated_at (TIMESTAMPs)
 declare(strict_types=1);
 
-require_once __DIR__ . '/../config/cors.php';
-
 /* ============== BOOTSTRAP ============== */
 require __DIR__ . '/../bd/bd.php';
-require __DIR__ . '/../config.php';
+require __DIR__ . '/../config/config.php';
 
 /* ============== HELPERS ============== */
 function out($data, int $status=200){ http_response_code($status); echo json_encode($data, JSON_UNESCAPED_UNICODE); exit; }

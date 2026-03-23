@@ -1,15 +1,13 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/../../config/cors.php';
-
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
 $DB_HOST = "127.0.0.1";
 $DB_NAME = "diego";     // <- TU base
-$DB_USER = "root";      // <- XAMPP default
-$DB_PASS = "";          // <- XAMPP default (vacío)
+$DB_USER = "diego_user";      // <- XAMPP default
+$DB_PASS = "Ab123456!A";          // <- XAMPP default (vacío)
 
 function pdo(): PDO {
   static $pdo = null;
