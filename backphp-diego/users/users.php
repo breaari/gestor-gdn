@@ -126,9 +126,12 @@ try {
           if (!$row) out(['message' => 'No encontrado'], 404);
           out(['user' => public_user($row)]);
         }
+        $suppliersOnly = parse_boolish($_GET['suppliers'] ?? null);
 
+        // si pide proveedores, traigo muchos más
+        $limitDefault = ($suppliersOnly === 1) ? 500 : 50;
         // GET /users.php?limit=&offset=&q=&is_admin=&is_active=&bank=
-        $limit   = clamp_int($_GET['limit']  ?? 50, 1, 100);
+        $limit   = clamp_int($_GET['limit'] ?? $limitDefault, 1, 500);
         $offset  = max(0, (int)($_GET['offset'] ?? 0));
         $qRaw    = nonempty_str($_GET['q'] ?? $_GET['supplier_q'] ?? null);
         $qDigits = $qRaw !== null ? only_digits($qRaw) : null;
